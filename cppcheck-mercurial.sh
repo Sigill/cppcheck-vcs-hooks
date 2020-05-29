@@ -1,11 +1,12 @@
-#!/bin/sh
+#!/bin/bash
 
 function usage
 {
-  echo "Usage: $0 [-h] [--from REV] [--to REV] [-c REV] [--tip|--tip+]"
+  echo "Usage: $0 [-h] [--from REV] [--to REV] [-c REV]"
   echo
   echo "Run cppcheck on the files modified between two Mercurial revisions."
-  echo "By default, it will process uncommited changes (--from tip)."
+  echo "By default, it will only process uncommited changes (what you see"
+  echo "when you do hg diff, aka --from tip)."
   echo
   echo "Options:"
   echo "  --from REV       Revision to start from (NOT inclusive, only changes"
@@ -15,16 +16,15 @@ function usage
   echo "  --to REV         Last revision to consider (inclusive)."
   echo "  -c/--change REV  Consider changes introduced by this revision."
   echo "                   Equivalent to --from \"p1(REV)\" --to REV."
-  echo "  tip              Analyse changes introduced in last revision."
-  echo "                   Equivalent to --from \"p1(tip)\" --to tip"
-  echo "  tip+             Analyse changes introduced in last revision,"
-  echo "                   including uncommited changes."
-  echo "                   Equivalent to --from \"p1(tip)\""
+  echo "  -u/--untracked   Include untracked files."
+  echo "  --exitcode       Exit code if findings are found (default is 0)."
   echo "  -h/--help        Print this help."
 }
 
-from=tip
+from=
 to=
+untracked=n
+errorexitcode=0
 
 while :; do
   case $1 in
@@ -57,13 +57,16 @@ while :; do
       to=$2
       shift
       ;;
-    tip)
-      from="p1(tip)"
-      to=tip
+    -u|--untracked)
+      untracked=y
       ;;
-    tip+)
-      from="p1(tip)"
-      to=
+    --exitcode)
+      if [ -z "$2" ]; then
+        >&2 echo '"--exitcode" requires a non-empty argument.'
+        exit 1
+      fi
+      errorexitcode=$2
+      shift
       ;;
     *) # No more options, stop parsing arguments.
       break
@@ -71,17 +74,6 @@ while :; do
 
   shift
 done
-
-get_altered_files() {
-  local FROM_ARG="--rev $1"
-  local TO_ARG="--rev $2"
-
-  if [ -z "$2" ]; then
-      TO_ARG=
-  fi
-
-  hg status -R "$HG_ROOT" $FROM_ARG $TO_ARG -m -a | grep -E '^[MA].*\.(cpp|cxx|h|hxx)$' | sed 's/[MA]\s//'
-}
 
 cppcheck_filter() {
     local path=
@@ -100,6 +92,10 @@ cppcheck_filter() {
     done
 }
 
+run_cppcheck() {
+    cppcheck -q --enable=style,performance,portability --language=c++ --inconclusive "$1" 2>&1 | cppcheck_filter "$FILTER_LINE_FILE"
+}
+
 HG_ROOT=`hg root`
 
 if [ -z "$HG_ROOT" ] ; then
@@ -107,7 +103,22 @@ if [ -z "$HG_ROOT" ] ; then
     exit 1
 fi
 
-ALTERED_FILES=$(get_altered_files "$from" "$to")
+declare -a REV1_ARGS
+declare -a REV2_ARGS
+
+if [ -n "$from" ]; then
+    REV1_ARGS+=('--rev' "$from")
+fi
+
+if [ -n "$to" ]; then
+    REV2_ARGS+=('--rev' "$to")
+fi
+
+#echo rev1 "${REV1_ARGS[@]}"
+#echo rev2 "${REV2_ARGS[@]}"
+
+[[ "$untracked" = "y" ]] && U_ARG="-u" || U_ARG=""
+ALTERED_FILES=$(hg status -R "$HG_ROOT" "${REV1_ARGS[@]}" "${REV2_ARGS[@]}" -m -a $U_ARG | grep -E '^[MA?].*\.(cpp|cxx|h|hxx)$' | sed 's/[MA?]\s//')
 
 TMPDIR=/tmp/cppcheck-hook
 mkdir -p "$TMPDIR"
@@ -126,27 +137,45 @@ SAVEIFS=$IFS
 IFS=$(echo -en "\n\b")
 for i in $ALTERED_FILES
 do
-    >&2 echo "Checking for errors:  $i"
-    mkdir -p `dirname "$TMPDIR/$i"`
+    >&2 echo "Running cppcheck on:  $i"
+
+
+    mkdir -p `dirname "$TMPDIR/R/$i"`
 
     if [ -z "$to" ]; then
-        cp "$HG_ROOT/$i" "$TMPDIR/$i.curr"
+        cp "$HG_ROOT/$i" "$TMPDIR/R/$i"
     else
-        hg cat -R "$HG_ROOT" --rev "$to" "$HG_ROOT/$i" > "$TMPDIR/$i.curr" &
+        hg cat -R "$HG_ROOT" "${REV2_ARG[@]}" "$HG_ROOT/$i" > "$TMPDIR/R/$i"
     fi
 
-    hg cat -R "$HG_ROOT" --rev "$from" "$HG_ROOT/$i" > "$TMPDIR/$i.prev" &
-    wait # hg cat can be slow, execute them in parallel and wait
+    pushd "$TMPDIR/R" > /dev/null
+    run_cppcheck "$i" > "$TMPDIR/findings-r"
+    popd > /dev/null
 
-    cppcheck -q --enable=style,performance,portability --language=c++ --inconclusive "$TMPDIR/$i.prev" 2>&1 | sed "s@$TMPDIR/$i.prev@$i@" | cppcheck_filter "$FILTER_LINE_FILE" > "$TMPDIR/findings-l"
-    cppcheck -q --enable=style,performance,portability --language=c++ --inconclusive "$TMPDIR/$i.curr" 2>&1 | sed "s@$TMPDIR/$i.curr@$i@" | cppcheck_filter "$FILTER_LINE_FILE" > "$TMPDIR/findings-r"
 
-    cppcheck-diff-findings.py "$TMPDIR/findings-l" "$TMPDIR/findings-r" >> "$TMPDIR/findings"
+    if [ -n "$from" ]; then
+        mkdir -p `dirname "$TMPDIR/L/$i"`
+
+        pushd "$TMPDIR/L" > /dev/null
+        cp "$TMPDIR/R/$i" "$TMPDIR/L/$i"
+        hg diff -R "$HG_ROOT" "${REV1_ARGS[@]}" "${REV2_ARGS[@]}" "$HG_ROOT/$i" | patch -Rs -p1
+        #hg cat -R "$HG_ROOT" "${REV1_ARGS[@]}" "$HG_ROOT/$i" > "$TMPDIR/L/$i"
+        run_cppcheck "$i" > "$TMPDIR/findings-l"
+        popd > /dev/null
+
+        cppcheck-diff-findings.py "$TMPDIR/findings-l" "$TMPDIR/findings-r" >> "$TMPDIR/findings"
+    else
+        cat "$TMPDIR/findings-r" >> "$TMPDIR/findings"
+    fi
 done
 
-if [ -s $TMPDIR/findings ] ; then
+exitcode=0
+
+if [ -s $TMPDIR/findings ]; then
     echo "The following new cppcheck warnings were detected:"
     cat "$TMPDIR/findings"
+    exitcode=$errorexitcode
 fi
 
 rm -rf "$TMPDIR"
+exit $exitcode

@@ -27,7 +27,7 @@ def get_findings(filename):
 
 if __name__ == '__main__':
   if len(sys.argv) != 3:
-    print("Usage: {0} old_findings new_findings".format(sys.argv[0]))
+    print("Usage: {0} original_findings new_findings".format(sys.argv[0]))
     sys.exit(-1)
 
   original_entries = get_findings(sys.argv[1])
