@@ -37,6 +37,7 @@ from=
 to=
 ignore=
 untracked=n
+declare -a files
 errorexitcode=0
 
 while :; do
@@ -83,6 +84,14 @@ while :; do
         exit 1
       fi
       errorexitcode=$2
+      shift
+      ;;
+    -f|--file)
+      if [ -z "$2" ]; then
+        >&2 echo '"--file" requires a non-empty argument.'
+        exit 1
+      fi
+      files+=("$2")
       shift
       ;;
     -v|--verbose)
@@ -161,18 +170,18 @@ if [ -n "$to" ]; then
     REV2_ARGS+=('--rev' "$to")
 fi
 
-[[ "$untracked" = "y" ]] && U_ARG="-u" || U_ARG=""
-ALTERED_FILES=$(run hg status -R "$HG_ROOT" "${REV1_ARGS[@]}" "${REV2_ARGS[@]}" -m -a $U_ARG | grep -E '^[MA?].*\.(cpp|cxx|h|hxx)$' | sed 's/[MA?]\s//')
+if [ ${#files[@]} -eq 0 ]; then
+    [[ "$untracked" = "y" ]] && U_ARG="-u" || U_ARG=""
+    readarray -t files < <( run hg status -R "$HG_ROOT" "${REV1_ARGS[@]}" "${REV2_ARGS[@]}" -m -a $U_ARG | grep -E '^[MA?].*\.(cpp|cxx|h|hxx)$' | sed 's/^[MA?]\s*//' )
+fi
 
 TMPDIR=$(mktemp -d --tmpdir cppcheck.mercurial.XXXXXXXXXX)
 
-SAVEIFS=$IFS
-IFS=$(echo -en "\n\b")
-declare -i i=0
-for f in $ALTERED_FILES
+for i in "${!files[@]}"
 do
-    i+=1
-    >&2 colorize "$COLOR_GREEN" echo "$i Running cppcheck on:  $f"
+    f="${files[$i]}"
+    i=$((i+1))
+    >&2 colorize "$COLOR_BLUE" echo "$i Running cppcheck on:  $f"
     src="$HG_ROOT/$f"
 
     fwd="$TMPDIR/$i"
