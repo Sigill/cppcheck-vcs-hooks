@@ -15,6 +15,7 @@ untracked=n
 declare -a files
 declare -a cppcheckoptions=("--enable=warning,style,performance,portability" "--language=c++" "--inconclusive")
 errorexitcode=0
+wd="$PWD"
 
 function usage
 {
@@ -39,6 +40,8 @@ function usage
   echo "                   If not specified, the list of files is automatically"
   echo "                   using hg status."
   echo "  -u/--untracked   Include untracked files."
+  echo "  --hg DIR         Location of the repository."
+  echo "                   If not specified, use current working directory."
   echo "  --exitcode       Exit code if findings are found (default is 0)."
   echo "  -v/--verbose     Verbose mode."
   echo "  -h/--help        Print this help."
@@ -46,39 +49,33 @@ function usage
   echo "Default cppcheck options are: ${cppcheckoptions[@]}."
 }
 
+assert_arg() {
+  if [ -z "$2" ]; then
+    >&2 echo "$0: option $1 requires a non-empty argument"
+    exit 1
+  fi
+}
 
 while :; do
   case $1 in
     --from)
-      if [ -z "$2" ]; then
-        >&2 echo '"--from" requires a non-empty argument.'
-        exit 1
-      fi
+      assert_arg "$1" "$2"
       from=$2
       shift
       ;;
     --to)
-      if [ -z "$2" ]; then
-        >&2 echo '"--to" requires a non-empty argument.'
-        exit 1
-      fi
+      assert_arg "$1" "$2"
       to=$2
       shift
       ;;
     -c|--change)
-      if [ -z "$2" ]; then
-        >&2 echo '"--change" requires a non-empty argument.'
-        exit 1
-      fi
+      assert_arg "$1" "$2"
       from="p1($2)"
       to=$2
       shift
       ;;
     --ignore)
-      if [ -z "$2" ]; then
-        >&2 echo '"--ignore" requires a non-empty argument.'
-        exit 1
-      fi
+      assert_arg "$1" "$2"
       ignore=$2
       shift
       ;;
@@ -86,19 +83,18 @@ while :; do
       untracked=y
       ;;
     --exitcode)
-      if [ -z "$2" ]; then
-        >&2 echo '"--exitcode" requires a non-empty argument.'
-        exit 1
-      fi
+      assert_arg "$1" "$2"
       errorexitcode=$2
       shift
       ;;
     -f|--file)
-      if [ -z "$2" ]; then
-        >&2 echo '"--file" requires a non-empty argument.'
-        exit 1
-      fi
+      assert_arg "$1" "$2"
       files+=("$2")
+      shift
+      ;;
+    --hg)
+      assert_arg "$1" "$2"
+      wd=$2
       shift
       ;;
     -v|--verbose)
@@ -164,8 +160,7 @@ run_cppcheck() {
     "${CMD[@]}" 3>&2 2>&1 1>&3 | cppcheck_filter
 }
 
-HG_ROOT=`hg root`
-
+HG_ROOT=$(hg --cwd "$wd" root)
 if [ -z "$HG_ROOT" ] ; then
     echo "not an hg repo..."
     exit 1
