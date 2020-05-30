@@ -1,30 +1,5 @@
 #!/bin/bash
 
-function usage
-{
-  echo "Usage: $0 [-h] [--from REV] [--to REV] [-c REV]"
-  echo
-  echo "Run cppcheck on the files modified between two Mercurial revisions."
-  echo "By default, it will only process uncommited changes (what you see"
-  echo "when you do hg diff, aka --from tip)."
-  echo
-  echo "Options:"
-  echo "  --from REV       Revision to start from (NOT inclusive, only changes"
-  echo "                   introduced AFTER this revision will be considered."
-  echo "                   Use p1(REV) to start from the first parent."
-  echo "                   See 'hg help revset' for more details."
-  echo "  --to REV         Last revision to consider (inclusive)."
-  echo "  -c/--change REV  Consider changes introduced by this revision."
-  echo "                   Equivalent to --from \"p1(REV)\" --to REV."
-  echo "  --ignore FILE    Ignore patterns. The first line of each finding"
-  echo "                   will be run through grep -f FILE. In case of match,"
-  echo "                   the finding will be ignored"
-  echo "  -u/--untracked   Include untracked files."
-  echo "  --exitcode       Exit code if findings are found (default is 0)."
-  echo "  -v/--verbose     Verbose mode."
-  echo "  -h/--help        Print this help."
-}
-
 COLOR_RED='\e[0;31m'
 COLOR_GREEN='\e[0;32m'
 COLOR_BLUE='\e[0;34m'
@@ -38,7 +13,39 @@ to=
 ignore=
 untracked=n
 declare -a files
+declare -a cppcheckoptions=("--enable=warning,style,performance,portability" "--language=c++" "--inconclusive")
 errorexitcode=0
+
+function usage
+{
+  echo "Usage: $0 [options...] [-- cppcheck options...]"
+  echo
+  echo "Run cppcheck on the files modified between two Mercurial revisions."
+  echo "By default, it will only process uncommited changes (what you see"
+  echo "when you do hg diff, aka --from tip)."
+  echo
+  echo "Options:"
+  echo "  --from REV       Revision to start from (NOT inclusive, only changes"
+  echo "                   introduced AFTER this revision will be considered."
+  echo "                   Use p1(REV) to start from the first parent."
+  echo "                   See 'hg help revset' for more details."
+  echo "  --to REV         Last revision to consider (inclusive)."
+  echo "  -c/--change REV  Consider changes introduced by this revision."
+  echo "                   Equivalent to --from \"p1(REV)\" --to REV."
+  echo "  --ignore FILE    Ignore patterns."
+  echo "                   The first line of each finding will be run through"
+  echo "                   grep -f FILE. In case of match, the finding is ignored."
+  echo "  -f/--file FILE   File to analyse."
+  echo "                   If not specified, the list of files is automatically"
+  echo "                   using hg status."
+  echo "  -u/--untracked   Include untracked files."
+  echo "  --exitcode       Exit code if findings are found (default is 0)."
+  echo "  -v/--verbose     Verbose mode."
+  echo "  -h/--help        Print this help."
+  echo
+  echo "Default cppcheck options are: ${cppcheckoptions[@]}."
+}
+
 
 while :; do
   case $1 in
@@ -101,6 +108,11 @@ while :; do
       >&2 usage
       exit
       ;;
+    --)
+      shift
+      cppcheckoptions=("$@")
+      break
+      ;;
     *) # No more options, stop parsing arguments.
       break
   esac
@@ -146,7 +158,7 @@ run() {
 }
 
 run_cppcheck() {
-    declare -a CMD=(cppcheck -q --enable=style,performance,portability --language=c++ --inconclusive --relative-paths="$1" "$1/$2")
+    declare -a CMD=(cppcheck -q "${cppcheckoptions[@]}" --relative-paths="$1" "$1/$2")
     [ $verbose -gt 0 ] && >&2 printcmd "${CMD[@]}"
     # Swap stderr & stdout
     "${CMD[@]}" 3>&2 2>&1 1>&3 | cppcheck_filter
@@ -211,7 +223,7 @@ do
         run_cppcheck "$fwd/L" "$f" > "$fwd/findings-l"
     fi
 
-    if [ $verbose -gt 0 ]; then
+    if [ $verbose -gt 1 ]; then
         if [ -n "$from" ]; then
             >&2 colorize "$COLOR_RED" cat "$leftf"
             >&2 colorize "$COLOR_LRED" cat "$fwd/findings-l"
