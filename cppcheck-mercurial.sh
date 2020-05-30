@@ -16,22 +16,31 @@ function usage
   echo "  --to REV         Last revision to consider (inclusive)."
   echo "  -c/--change REV  Consider changes introduced by this revision."
   echo "                   Equivalent to --from \"p1(REV)\" --to REV."
+  echo "  --ignore FILE    Ignore patterns. The first line of each finding"
+  echo "                   will be run through grep -f FILE. In case of match,"
+  echo "                   the finding will be ignored"
   echo "  -u/--untracked   Include untracked files."
   echo "  --exitcode       Exit code if findings are found (default is 0)."
+  echo "  -v/--verbose     Verbose mode."
   echo "  -h/--help        Print this help."
 }
 
+COLOR_RED='\e[0;31m'
+COLOR_GREEN='\e[0;32m'
+COLOR_BLUE='\e[0;34m'
+COLOR_LRED='\e[0;91m'
+COLOR_LGREEN='\e[0;92m'
+COLOR_NC='\e[0m'
+
+declare -i verbose=0
 from=
 to=
+ignore=
 untracked=n
 errorexitcode=0
 
 while :; do
   case $1 in
-    -h|--help)
-      >&2 usage
-      exit
-      ;;
     --from)
       if [ -z "$2" ]; then
         >&2 echo '"--from" requires a non-empty argument.'
@@ -57,6 +66,14 @@ while :; do
       to=$2
       shift
       ;;
+    --ignore)
+      if [ -z "$2" ]; then
+        >&2 echo '"--ignore" requires a non-empty argument.'
+        exit 1
+      fi
+      ignore=$2
+      shift
+      ;;
     -u|--untracked)
       untracked=y
       ;;
@@ -68,6 +85,13 @@ while :; do
       errorexitcode=$2
       shift
       ;;
+    -v|--verbose)
+      verbose=$((verbose + 1))
+      ;;
+    -h|--help)
+      >&2 usage
+      exit
+      ;;
     *) # No more options, stop parsing arguments.
       break
   esac
@@ -76,24 +100,47 @@ while :; do
 done
 
 cppcheck_filter() {
-    local path=
-    while read; do
-        if [[ $REPLY =~ ^([^:]*):[0-9]+:[0-9]+: ]]; then
-            echo "$REPLY" | grep -q -f $1
-            if [[ $? -ne 0 ]]; then
-                path=${BASH_REMATCH[1]}
+    if [ -n "$ignore" -a -f "$ignore" ]; then
+        local path=
+        while read; do
+            if [[ $REPLY =~ ^([^:]*):[0-9]+:[0-9]+: ]]; then
+                echo "$REPLY" | grep -q -f $ignore
+                if [[ $? -ne 0 ]]; then
+                    path=${BASH_REMATCH[1]}
+                    echo $REPLY
+                else
+                    path=
+                fi
+            elif [[ -n $path ]]; then
                 echo $REPLY
-            else
-                path=
             fi
-        elif [[ -n $path ]]; then
-            echo $REPLY
-        fi
-    done
+        done
+    else
+        cat
+    fi
+}
+
+colorize() {
+    echo -ne "$1"
+    shift
+    "$@"
+    echo -ne "$COLOR_NC"
+}
+
+printcmd() {
+  colorize "$COLOR_BLUE" echo "$@"
+}
+
+run() {
+  [ $verbose -gt 0 ] && >&2 printcmd "$@"
+  "$@"
 }
 
 run_cppcheck() {
-    cppcheck -q --enable=style,performance,portability --language=c++ --inconclusive "$1" 2>&1 | cppcheck_filter "$FILTER_LINE_FILE"
+    declare -a CMD=(cppcheck -q --enable=style,performance,portability --language=c++ --inconclusive --relative-paths="$1" "$1/$2")
+    [ $verbose -gt 0 ] && >&2 printcmd "${CMD[@]}"
+    # Swap stderr & stdout
+    "${CMD[@]}" 3>&2 2>&1 1>&3 | cppcheck_filter
 }
 
 HG_ROOT=`hg root`
@@ -114,59 +161,64 @@ if [ -n "$to" ]; then
     REV2_ARGS+=('--rev' "$to")
 fi
 
-#echo rev1 "${REV1_ARGS[@]}"
-#echo rev2 "${REV2_ARGS[@]}"
-
 [[ "$untracked" = "y" ]] && U_ARG="-u" || U_ARG=""
-ALTERED_FILES=$(hg status -R "$HG_ROOT" "${REV1_ARGS[@]}" "${REV2_ARGS[@]}" -m -a $U_ARG | grep -E '^[MA?].*\.(cpp|cxx|h|hxx)$' | sed 's/[MA?]\s//')
+ALTERED_FILES=$(run hg status -R "$HG_ROOT" "${REV1_ARGS[@]}" "${REV2_ARGS[@]}" -m -a $U_ARG | grep -E '^[MA?].*\.(cpp|cxx|h|hxx)$' | sed 's/[MA?]\s//')
 
-TMPDIR=/tmp/cppcheck-hook
-mkdir -p "$TMPDIR"
-
-FILTER_LINE_FILE=$TMPDIR/cppcheck-ignore
-echo 'does not have a constructor
-(information)
-is not initialized in the constructor
-C-style pointer casting
-[Aa]ssert
-convertion between' > $FILTER_LINE_FILE
-
-rm -f "$TMPDIR/findings"
+TMPDIR=$(mktemp -d --tmpdir cppcheck.mercurial.XXXXXXXXXX)
 
 SAVEIFS=$IFS
 IFS=$(echo -en "\n\b")
-for i in $ALTERED_FILES
+declare -i i=0
+for f in $ALTERED_FILES
 do
-    >&2 echo "Running cppcheck on:  $i"
+    i+=1
+    >&2 colorize "$COLOR_GREEN" echo "$i Running cppcheck on:  $f"
+    src="$HG_ROOT/$f"
+
+    fwd="$TMPDIR/$i"
+    mkdir -p "$fwd" && pushd "$fwd" > /dev/null
 
 
-    mkdir -p `dirname "$TMPDIR/R/$i"`
+    rightf="$fwd/R/$f"
+    mkdir -p `dirname "$rightf"`
 
     if [ -z "$to" ]; then
-        cp "$HG_ROOT/$i" "$TMPDIR/R/$i"
+        run cp "$src" "$rightf"
     else
-        hg cat -R "$HG_ROOT" "${REV2_ARG[@]}" "$HG_ROOT/$i" > "$TMPDIR/R/$i"
+        run hg cat -R "$HG_ROOT" "${REV2_ARG[@]}" "$src" -o "$rightf"
     fi
 
-    pushd "$TMPDIR/R" > /dev/null
-    run_cppcheck "$i" > "$TMPDIR/findings-r"
-    popd > /dev/null
+    run_cppcheck "$fwd/R" "$f" > "$fwd/findings-r"
 
 
     if [ -n "$from" ]; then
-        mkdir -p `dirname "$TMPDIR/L/$i"`
+        leftf="$fwd/L/$f"
+        mkdir -p `dirname "$leftf"`
 
-        pushd "$TMPDIR/L" > /dev/null
-        cp "$TMPDIR/R/$i" "$TMPDIR/L/$i"
-        hg diff -R "$HG_ROOT" "${REV1_ARGS[@]}" "${REV2_ARGS[@]}" "$HG_ROOT/$i" | patch -Rs -p1
-        #hg cat -R "$HG_ROOT" "${REV1_ARGS[@]}" "$HG_ROOT/$i" > "$TMPDIR/L/$i"
-        run_cppcheck "$i" > "$TMPDIR/findings-l"
-        popd > /dev/null
-
-        cppcheck-diff-findings.py "$TMPDIR/findings-l" "$TMPDIR/findings-r" >> "$TMPDIR/findings"
-    else
-        cat "$TMPDIR/findings-r" >> "$TMPDIR/findings"
+        run cp "$rightf" "$leftf"
+        run hg diff -R "$HG_ROOT" "${REV1_ARGS[@]}" "${REV2_ARGS[@]}" "$src" > "$fwd/patchfile"
+        run patch -Rs -p1 --posix -d "$fwd/L" -i "$fwd/patchfile"
+        #hg cat -R "$HG_ROOT" "${REV1_ARGS[@]}" "$HG_ROOT/$f" > "$TMPDIR/L/$f"
+        run_cppcheck "$fwd/L" "$f" > "$fwd/findings-l"
     fi
+
+    if [ $verbose -gt 0 ]; then
+        if [ -n "$from" ]; then
+            >&2 colorize "$COLOR_RED" cat "$leftf"
+            >&2 colorize "$COLOR_LRED" cat "$fwd/findings-l"
+        fi
+
+        >&2 colorize "$COLOR_GREEN" cat "$rightf"
+        >&2 colorize "$COLOR_LGREEN" cat "$fwd/findings-r"
+    fi
+
+    if [ -n "$from" ]; then
+        run cppcheck-diff-findings.py "$fwd/findings-l" "$fwd/findings-r" >> "$TMPDIR/findings"
+    else
+        cat "$fwd/findings-r" >> "$TMPDIR/findings"
+    fi
+
+    popd > /dev/null
 done
 
 exitcode=0
