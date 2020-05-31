@@ -1,5 +1,7 @@
 #!/bin/bash
 
+SCRIPTDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
 COLOR_RED='\e[0;31m'
 COLOR_GREEN='\e[0;32m'
 COLOR_BLUE='\e[0;34m'
@@ -10,6 +12,7 @@ COLOR_NC='\e[0m'
 declare -i verbose=0
 from=
 to=
+change=
 ignore=
 untracked=n
 declare -a files
@@ -60,23 +63,24 @@ while :; do
   case $1 in
     --from)
       assert_arg "$1" "$2"
-      from=$2
+      from="$2"
       shift
       ;;
     --to)
       assert_arg "$1" "$2"
-      to=$2
+      to="$2"
       shift
       ;;
     -c|--change)
       assert_arg "$1" "$2"
       from="p1($2)"
-      to=$2
+      to="$2"
+      change="$2"
       shift
       ;;
     --ignore)
       assert_arg "$1" "$2"
-      ignore=$2
+      ignore="$2"
       shift
       ;;
     -u|--untracked)
@@ -84,7 +88,7 @@ while :; do
       ;;
     --exitcode)
       assert_arg "$1" "$2"
-      errorexitcode=$2
+      errorexitcode="$2"
       shift
       ;;
     -f|--file)
@@ -149,77 +153,76 @@ printcmd() {
 }
 
 run() {
-  [ $verbose -gt 0 ] && >&2 printcmd "$@"
+  [ $verbose -gt 1 ] && >&2 printcmd "$@"
   "$@"
 }
 
 run_cppcheck() {
     declare -a CMD=(cppcheck -q "${cppcheckoptions[@]}" --relative-paths="$1" "$1/$2")
-    [ $verbose -gt 0 ] && >&2 printcmd "${CMD[@]}"
+    [ $verbose -gt 1 ] && >&2 printcmd "${CMD[@]}"
     # Swap stderr & stdout
     "${CMD[@]}" 3>&2 2>&1 1>&3 | cppcheck_filter
 }
 
-HG_ROOT=$(hg --cwd "$wd" root)
-if [ -z "$HG_ROOT" ] ; then
-    echo "not an hg repo..."
-    exit 1
-fi
+process_file() {
+    local f="$1"
+    local a="$2"
 
-declare -a REV1_ARGS
-declare -a REV2_ARGS
+    local src="$HG_ROOT/$f"
 
-if [ -n "$from" ]; then
-    REV1_ARGS+=('--rev' "$from")
-fi
-
-if [ -n "$to" ]; then
-    REV2_ARGS+=('--rev' "$to")
-fi
-
-if [ ${#files[@]} -eq 0 ]; then
-    [[ "$untracked" = "y" ]] && U_ARG="-u" || U_ARG=""
-    readarray -t files < <( run hg status -R "$HG_ROOT" "${REV1_ARGS[@]}" "${REV2_ARGS[@]}" -m -a $U_ARG | grep -E '^[MA?].*\.(cpp|cxx|h|hxx)$' | sed 's/^[MA?]\s*//' )
-fi
-
-TMPDIR=$(mktemp -d --tmpdir cppcheck.mercurial.XXXXXXXXXX)
-
-for i in "${!files[@]}"
-do
-    f="${files[$i]}"
-    i=$((i+1))
-    >&2 colorize "$COLOR_BLUE" echo "$i Running cppcheck on:  $f"
-    src="$HG_ROOT/$f"
-
-    fwd="$TMPDIR/$i"
-    mkdir -p "$fwd" && pushd "$fwd" > /dev/null
+    local fwd="$TMPDIR/$i"
+    mkdir -p "$fwd"
+    pushd "$fwd" > /dev/null
 
 
-    rightf="$fwd/R/$f"
+    local process_left=y
+    if [ -z "$from" -o "$a" != "M" ]; then
+      process_left=n
+    fi
+
+    if [ "$process_left" = "y" ]; then
+        local leftf="$fwd/L/$f"
+        mkdir -p `dirname "$leftf"`
+
+        run hg cat -R "$HG_ROOT" "${REV1_ARGS[@]}" "$src" -o "$leftf"
+    fi
+
+    declare -a waitpids
+
+    if [ -s "$fwd/L/$f" ]; then
+        run_cppcheck "$fwd/L" "$f" > "$fwd/findings-l" &
+        waitpids+=("$!")
+    fi
+
+
+    local rightf="$fwd/R/$f"
     mkdir -p `dirname "$rightf"`
 
     if [ -z "$to" ]; then
         run cp "$src" "$rightf"
+    elif [ "$process_left" = "y" ]; then
+        run cp "$leftf" "$rightf" && \
+        run hg diff -R "$HG_ROOT" -a "${RANGE_ARGS[@]}" "$src" > "$fwd/patchfile" && \
+        run patch -us -p1 --posix --batch -d "$fwd/R" -i "$fwd/patchfile"
     else
-        run hg cat -R "$HG_ROOT" "${REV2_ARG[@]}" "$src" -o "$rightf"
+        run hg cat -R "$HG_ROOT" "${REV2_ARGS[@]}" "$src" -o "$rightf"
     fi
 
-    run_cppcheck "$fwd/R" "$f" > "$fwd/findings-r"
-
-
-    if [ -n "$from" ]; then
-        leftf="$fwd/L/$f"
-        mkdir -p `dirname "$leftf"`
-
-        run cp "$rightf" "$leftf"
-        run hg diff -R "$HG_ROOT" "${REV1_ARGS[@]}" "${REV2_ARGS[@]}" "$src" > "$fwd/patchfile"
-        run patch -Rs -p1 --posix -d "$fwd/L" -i "$fwd/patchfile"
-        #hg cat -R "$HG_ROOT" "${REV1_ARGS[@]}" "$HG_ROOT/$f" > "$TMPDIR/L/$f"
-        run_cppcheck "$fwd/L" "$f" > "$fwd/findings-l"
+    if [ -s "$fwd/R/$f" ]; then
+        run_cppcheck "$fwd/R" "$f" > "$fwd/findings-r"
+        waitpids+=("$!")
     fi
 
-    if [ $verbose -gt 1 ]; then
-        if [ -n "$from" ]; then
+    wait "${waitpid[@]}"
+
+    if [ ! -s "$fwd/R/$f" ]; then
+        popd > /dev/null
+        continue
+    fi
+
+
+    if [ $verbose -gt 2 ]; then
+        if [ "$process_left" = "y" ]; then
             >&2 colorize "$COLOR_RED" cat "$leftf"
             >&2 colorize "$COLOR_LRED" cat "$fwd/findings-l"
         fi
@@ -228,19 +231,66 @@ do
         >&2 colorize "$COLOR_LGREEN" cat "$fwd/findings-r"
     fi
 
-    if [ -n "$from" ]; then
-        run cppcheck-diff-findings.py "$fwd/findings-l" "$fwd/findings-r" >> "$TMPDIR/findings"
+    if [ -f "$fwd/findings-l" -a -f "$fwd/findings-r" ]; then
+        python3 "$SCRIPTDIR/cppcheck-diff-findings.py" "$fwd/findings-l" "$fwd/findings-r" >> "$TMPDIR/findings"
     else
         cat "$fwd/findings-r" >> "$TMPDIR/findings"
     fi
 
     popd > /dev/null
+}
+
+HG_ROOT=$(hg --cwd "$wd" root)
+if [ -z "$HG_ROOT" ] ; then
+    echo "not an hg repo..."
+    exit 1
+fi
+
+if [ -n "$to" ]; then
+    nparents=$(run hg log -R "$HG_ROOT" --rev "parents($to)" --template '{rev}\n' | wc -l)
+    if [ "$nparents" -ne 1 ]; then
+        [ $verbose -gt 0 ] && >&2 echo "$to is a merge, skipping"
+        exit
+    fi
+fi
+
+declare -a REV1_ARGS
+if [ -n "$from" ]; then
+    REV1_ARGS+=('--rev' "$from")
+fi
+
+declare -a REV2_ARGS
+if [ -n "$to" ]; then
+    REV2_ARGS+=('--rev' "$to")
+fi
+
+declare -a RANGE_ARGS
+if [ -z "$change" ]; then
+    RANGE_ARGS+=("${REV1_ARGS[@]}")
+    RANGE_ARGS+=("${REV2_ARGS[@]}")
+else
+    RANGE_ARGS+=('--change' "$change")
+fi
+
+[[ "$untracked" = "y" ]] && U_ARG="-u" || U_ARG=""
+readarray -t files < <( run hg status -R "$HG_ROOT" "${RANGE_ARGS[@]}" -m -a $U_ARG "${files[@]}"| grep -E '^[MA?]\s.*\.(cpp|cxx|h|hxx)$' )
+
+TMPDIR=$(mktemp -d --tmpdir cppcheck.mercurial.XXXXXXXXXX)
+
+for i in "${!files[@]}"
+do
+    l="${files[$i]}"
+    a=$(echo "$l" | awk '{print $1}')
+    f=$(echo "$l" | awk '{print $2}')
+    i=$((i+1))
+    [ $verbose -gt 0 ] && >&2 colorize "$COLOR_BLUE" echo "$i Running cppcheck on:  $f"
+
+    process_file "$f" "$a"
 done
 
 exitcode=0
 
 if [ -s $TMPDIR/findings ]; then
-    echo "The following new cppcheck warnings were detected:"
     cat "$TMPDIR/findings"
     exitcode=$errorexitcode
 fi

@@ -29,9 +29,10 @@ std::string f(const std::string s) {
 EOF
 
 declare -a BASECMD=(cppcheck-mercurial.sh -v)
+#declare -a BASECMD=(/opt/python3/bin/python3 ~/Apps/cppcheck-vcs-utils/cppcheck-mercurial.py)
 
 run "Commit 0+ (pass by const ref)" "${BASECMD[@]}"
-run "Commit 0+ (empty)" "${BASECMD[@]}" --from 'p1(tip) or 0' --to tip
+run "Commit 0+ (skipped, no parent)" "${BASECMD[@]}" --from 'p1(tip) or 0' --to tip
 run "Commit 0+ (pass by const ref)" "${BASECMD[@]}" --from 'p1(tip) or 0'
 
 hg commit -m "Commit 1"
@@ -56,7 +57,7 @@ std::string f(const std::string s) {
 EOF
 
 run "Commit 1+ (pass by const ref, catch by ref)" "${BASECMD[@]}"
-run "Commit 1+ (catch by ref)" "${BASECMD[@]}" --from 'p1(tip) or 0'
+run "Commit 1+ (pass by const ref, catch by ref)" "${BASECMD[@]}" --from 'p1(tip) or 0'
 
 hg commit -m "Commit 2"
 COMMIT=$(hg id -i)
@@ -77,13 +78,14 @@ std::string f(const std::string s) {
 }
 EOF
 
-run "Commit 2+ (pass by const ref)" "${BASECMD[@]}" --from 'p1(tip) or 0' 
+run "Commit 2+ (pass by const ref)" "${BASECMD[@]}"
+run "Commit 2+ (skipped)" "${BASECMD[@]}" --from 'p1(tip) or 0' 
 
 hg commit -m "Commit 3"
 COMMIT=$(hg id -i)
 
 run "Commit 3 (empty)" "${BASECMD[@]}"
-run "Commit 3 (empty)" "${BASECMD[@]}" --from 'p1(tip) or 0' --to tip
+run "Commit 3 (pass by const ref)" "${BASECMD[@]}" --from 'p1(tip) or 0' --to tip
 
 popd "$HG_ROOT" > /dev/null
 

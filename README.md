@@ -14,12 +14,12 @@ The `cppcheck-diff-findings` scripts allow to perform fuzzy analysis between two
 
 ### Python version
 
-The Python version requires `editdist` module:
+The Python version requires `editdistance` module:
 
 ```
-pip install editdist
+pip install editdistance
 or
-yum install python-editdist
+yum install python-editdistance
 ```
 
 The `Levenshtein` module can also be used instead (you'll have to modify the script for that).
