@@ -25,8 +25,7 @@ parser.add_argument('-u', '--untracked', dest='untracked', action='store_true',
                     help='Include untracked files.')
 parser.add_argument('--ignore', dest='ignore', metavar='FILE',
                     help='Ignore patterns.\n'
-                         'The first line of each finding will be run through\n'
-                         'grep -f FILE. In case of match, the finding is ignored.')
+                         'In case of match, the finding is ignored.')
 parser.add_argument('--hg', dest='hg_root', metavar='DIR', default=os.getcwd(),
                     help='Location of the mercurial repository.')
 parser.add_argument('--exitcode', type=int, dest='exitcode', metavar='VALUE=0', default=0,

@@ -44,14 +44,14 @@ class MercurialCPPCheckRunner(object):
     self.ignore_patterns = patterns
 
   def load_ignore_patterns(self, filename):
-    with open(args.ignore, 'r') as f:
+    with open(filename, 'r') as f:
       self.ignore_patterns = [re.compile(line.rstrip('\n')) for line in f]
 
   def set_cppcheck_options(self, *args):
     self.cppcheckoptions = args
 
   def is_relevant(self, finding):
-    return all(not p.match(finding) for p in self.ignore_patterns)
+    return not any(p.search(finding) for p in self.ignore_patterns)
 
   def count_parents(self, rev):
     result = self.__capture('hg', 'log', '-R', self.hg_root, '--rev', 'parents(%s)' % rev, '--template', '{rev}\n')
@@ -92,7 +92,7 @@ class MercurialCPPCheckRunner(object):
     if len(self.ignore_patterns) == 0:
       return findings
 
-    return [finding for finding in findings if is_relevant(finding)]
+    return [finding for finding in findings if self.is_relevant(finding)]
 
   def analyse_file(self, i, f, s, tmpdir, leftrev, rightrev, leftrev_args, rightrev_args, range_args):
     src = os.path.join(self.hg_root, f)
