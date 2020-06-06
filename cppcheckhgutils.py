@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os, sys, re, shlex, shutil
 import subprocess
 from termcolor import colored
@@ -17,23 +18,25 @@ class MercurialCPPCheckRunner(object):
     with open(filename, 'r') as f:
       eprint(colored(f.read(), color))
 
-  def __print_cmd(self, *args):
+  def __print_cmd(self, args):
     if self.verbose > 1:
       MercurialCPPCheckRunner.eprint(colored(shlex.join(args), 'blue'))
 
-  def __execute(self, *args, out=subprocess.DEVNULL, err = subprocess.DEVNULL):
-    self.__print_cmd(*args)
-    return subprocess.run(args, stdout=out, stderr=err)
+  def __execute(self, args, stdout=None, stderr=None):
+    self.__print_cmd(args)
+    p = subprocess.Popen(args, stdout=stdout, stderr=stderr)
+    (out, err) = p.communicate()
+    return (p.returncode, out, err)
 
-  def __capture(self, *args):
-    return self.__execute(*args, out=subprocess.PIPE , err=subprocess.PIPE)
+  def __capture(self, args):
+    return self.__execute(args, stdout=subprocess.PIPE , stderr=subprocess.PIPE)
 
   def __init__(self, hg_root=os.getcwd(), **kwargs):
     self.verbose = kwargs['verbose'] if 'verbose' in kwargs else 0
 
-    result = self.__capture('hg', '--cwd', hg_root, 'root')
-    if result.returncode == 0:
-      self.hg_root = result.stdout.strip().decode('utf-8')
+    result = self.__capture(['hg', '--cwd', hg_root, 'root'])
+    if result[0] == 0:
+      self.hg_root = result[1].strip().decode('utf-8')
     else:
       raise ValueError('No mercurial repository found at %s' % hg_root)
 
@@ -54,11 +57,11 @@ class MercurialCPPCheckRunner(object):
     return not any(p.search(finding) for p in self.ignore_patterns)
 
   def count_parents(self, rev):
-    result = self.__capture('hg', 'log', '-R', self.hg_root, '--rev', 'parents(%s)' % rev, '--template', '{rev}\n')
-    if result.returncode != 0:
+    result = self.__capture(['hg', 'log', '-R', self.hg_root, '--rev', 'parents(%s)' % rev, '--template', '{rev}\n'])
+    if result[0] != 0:
       raise ValueError('Unable to find revision %s' % rev)
 
-    lines = result.stdout.strip().decode('utf-8').split('\n')
+    lines = result[1].strip().decode('utf-8').split('\n')
 
     if len(lines) > 0 and len(lines[-1]) == 0:
       del lines[-1]
@@ -66,14 +69,20 @@ class MercurialCPPCheckRunner(object):
     return len(lines)
 
   def list_altered_files(self, range_args, untracked, files):
-    result = self.__capture('hg', 'status', '-R', self.hg_root, *range_args, '-m', '-a', *(['-u'] if untracked else []), *files)
-    if result.returncode != 0:
+    cmd = ['hg', 'status', '-R', self.hg_root, '-m', '-a']
+    if untracked:
+      cmd.append('-u')
+    cmd.extend(range_args)
+    cmd.extend(files)
+
+    result = self.__capture(cmd)
+    if result[0] != 0:
       raise ValueError('Unable to get status for %s' % range_args)
 
     status_re = re.compile('^([MA?])\\s*(.*\\.(?:cpp|cxx|h|hxx))$')
 
     altered_files = []
-    for line in result.stdout.decode('utf-8').split('\n'):
+    for line in result[1].decode('utf-8').split('\n'):
       m = status_re.search(line)
       if m:
         altered_files.append((m.group(2), m.group(1)))
@@ -81,13 +90,16 @@ class MercurialCPPCheckRunner(object):
     return altered_files
 
   def run_cppcheck(self, d, f):
-    cmd = ['cppcheck', '-q', *self.cppcheckoptions, '--relative-paths=%s' % d, os.path.join(d, f)]
-    result = self.__capture(*cmd)
+    cmd = ['cppcheck', '-q', '--relative-paths=%s' % d]
+    cmd.extend(self.cppcheckoptions)
+    cmd.append(os.path.join(d, f))
 
-    if len(result.stderr) == 0:
+    result = self.__capture(cmd)
+
+    if len(result[2]) == 0:
       return []
 
-    findings = cppcheckutils.get_findings(result.stderr.decode('utf-8').split('\n'))
+    findings = cppcheckutils.get_findings(result[2].decode('utf-8').split('\n'))
 
     if len(self.ignore_patterns) == 0:
       return findings
@@ -110,22 +122,33 @@ class MercurialCPPCheckRunner(object):
 
     if analyse_left:
       os.makedirs(os.path.dirname(leftf))
-      self.__capture('hg', 'cat', '-R', self.hg_root, *leftrev_args, src, '-o', leftf)
+      cmd = ['hg', 'cat', '-R', self.hg_root]
+      cmd.extend(leftrev_args)
+      cmd.extend([src, '-o', leftf])
+      self.__capture(cmd)
 
     os.makedirs(os.path.dirname(rightf))
 
     if rightrev is None:
-      self.__print_cmd('cp', src, rightf)
+      self.__print_cmd(['cp', src, rightf])
       shutil.copyfile(src, rightf)
     elif analyse_left:
-      self.__print_cmd('cp', leftf, rightf)
+      self.__print_cmd(['cp', leftf, rightf])
       shutil.copyfile(leftf, rightf)
       patchfile = os.path.join(fwd, 'patchfile')
       with open(patchfile, 'w') as out:
-        self.__execute('hg', 'diff', '-R', self.hg_root, '-a', *range_args, src, out=out, err=subprocess.PIPE)
-      self.__capture('patch', '-us', '-p1', '--posix', '--batch', '-d', rightd, '-i', patchfile)
+        cmd = ['hg', 'diff', '-R', self.hg_root, '-a']
+        cmd.extend(range_args)
+        cmd.append(src)
+
+        self.__execute(cmd, stdout=out, stderr=subprocess.PIPE)
+      self.__capture(['patch', '-us', '-p1', '--posix', '--batch', '-d', rightd, '-i', patchfile])
     else:
-      self.__capture('hg', 'cat', '-R', self.hg_root, *rightrev_args, src, '-o', rightf)
+      cmd = ['hg', 'cat', '-R', self.hg_root]
+      cmd.extend(rightrev_args)
+      cmd.extend([src, '-o', rightf])
+
+      self.__capture(cmd)
 
     leftfindings = self.run_cppcheck(leftd, f) if os.path.exists(leftf) else []
     rightfindings = self.run_cppcheck(rightd, f) if os.path.exists(rightf) else []
@@ -157,7 +180,7 @@ class MercurialCPPCheckRunner(object):
       i, (f, s) = ifs
       return self.ctx.analyse_file(i, f, s, self.tmpdir, self.leftrev, self.rightrev, self.leftrev_args, self.rightrev_args, self.range_args)
 
-  def analyse(self, change=None, leftrev=None, rightrev=None, untracked=False, files=[], j=os.cpu_count(), keep=False):
+  def analyse(self, change=None, leftrev=None, rightrev=None, untracked=False, files=[], j=multiprocessing.cpu_count(), keep=False):
     if change:
       leftrev = 'p1(%s)' % change
       rightrev = change
@@ -165,9 +188,10 @@ class MercurialCPPCheckRunner(object):
       leftrev = leftrev
       rightrev = rightrev
 
-    nparents = self.count_parents(rightrev)
-    if nparents != 1:
-      raise ValueError('Revision %s has %d parents, skipping' % (rightrev, nparents))
+    if rightrev:
+      nparents = self.count_parents(rightrev)
+      if nparents != 1:
+        raise ValueError('Revision %s has %d parents, skipping' % (rightrev, nparents))
 
     leftrev_args  = ['--rev', leftrev]  if leftrev  else []
     rightrev_args = ['--rev', rightrev] if rightrev else []
@@ -176,7 +200,7 @@ class MercurialCPPCheckRunner(object):
 
     altered_files = self.list_altered_files(range_args, untracked, files)
 
-    tmpdir = tempfile.mkdtemp(None, 'cppcheck.hg.')
+    tmpdir = tempfile.mkdtemp('', 'cppcheck.hg.')
 
     worker = self.Worker(self, tmpdir, leftrev, rightrev, leftrev_args, rightrev_args, range_args)
 

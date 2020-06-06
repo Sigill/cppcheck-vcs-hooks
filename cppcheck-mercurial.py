@@ -1,8 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
+from __future__ import print_function
 import os, sys
 import argparse
 from argparse import RawTextHelpFormatter
+import multiprocessing
 
 sys.path.append(os.path.abspath(os.path.dirname(os.path.realpath(__file__))))
 from cppcheckhgutils import MercurialCPPCheckRunner
@@ -32,13 +34,12 @@ parser.add_argument('--exitcode', type=int, dest='exitcode', metavar='VALUE=0', 
                     help='Exit code if findings are found.')
 parser.add_argument('-k', '--keep', dest='keep', default=False,
                     help='Keep working directory')
-parser.add_argument('-j', dest='j', type=int, default=os.cpu_count(),
+parser.add_argument('-j', dest='j', type=int, default=multiprocessing.cpu_count(),
                     help='Number of threads to use.')
 parser.add_argument('-v', '--verbose', dest='verbose', action='count', default=0,
                     help='Verbose mode')
 
 (args, unknown) = parser.parse_known_args()
-verbose = args.verbose
 
 runner = MercurialCPPCheckRunner(args.hg_root, verbose=args.verbose)
 

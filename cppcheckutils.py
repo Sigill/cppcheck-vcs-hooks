@@ -1,7 +1,7 @@
 import sys
 import re
-import editdistance
-#import Levenshtein
+
+import editdistance as editdist
 
 def get_findings(iter):
   entries = []
@@ -21,8 +21,7 @@ def is_new_finding(new_finding, known_findings):
   closest_dst = 8 # Do not authorize more tha 8 editions.
   closest = None
   for known_finding in known_findings:
-    dst = editdistance.distance(new_finding, known_finding)
-    #dst = Levenshtein.distance(new_finding, known_finding)
+    dst = editdist.distance(new_finding, known_finding)
     if dst < closest_dst:
       closest_dst = dst
       closest = known_finding
