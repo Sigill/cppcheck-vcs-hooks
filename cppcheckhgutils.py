@@ -8,6 +8,20 @@ import multiprocessing
 sys.path.append(os.path.abspath(os.path.dirname(os.path.realpath(__file__))))
 import cppcheckutils
 
+class Worker(object):
+  def __init__(self, ctx, tmpdir, leftrev, rightrev, leftrev_args, rightrev_args, range_args):
+    self.ctx = ctx
+    self.tmpdir = tmpdir
+    self.leftrev = leftrev
+    self.rightrev = rightrev
+    self.leftrev_args = leftrev_args
+    self.rightrev_args = rightrev_args
+    self.range_args = range_args
+
+  def __call__(self, ifs):
+    i, (f, s) = ifs
+    return self.ctx.analyse_file(i, f, s, self.tmpdir, self.leftrev, self.rightrev, self.leftrev_args, self.rightrev_args, self.range_args)
+
 class MercurialCPPCheckRunner(object):
   @staticmethod
   def eprint(*args, **kwargs):
@@ -166,20 +180,6 @@ class MercurialCPPCheckRunner(object):
     else:
       return rightfindings
 
-  class Worker(object):
-    def __init__(self, ctx, tmpdir, leftrev, rightrev, leftrev_args, rightrev_args, range_args):
-      self.ctx = ctx
-      self.tmpdir = tmpdir
-      self.leftrev = leftrev
-      self.rightrev = rightrev
-      self.leftrev_args = leftrev_args
-      self.rightrev_args = rightrev_args
-      self.range_args = range_args
-
-    def __call__(self, ifs):
-      i, (f, s) = ifs
-      return self.ctx.analyse_file(i, f, s, self.tmpdir, self.leftrev, self.rightrev, self.leftrev_args, self.rightrev_args, self.range_args)
-
   def analyse(self, change=None, leftrev=None, rightrev=None, untracked=False, files=[], j=multiprocessing.cpu_count(), keep=False):
     if change:
       leftrev = 'p1(%s)' % change
@@ -202,7 +202,7 @@ class MercurialCPPCheckRunner(object):
 
     tmpdir = tempfile.mkdtemp('', 'cppcheck.hg.')
 
-    worker = self.Worker(self, tmpdir, leftrev, rightrev, leftrev_args, rightrev_args, range_args)
+    worker = Worker(self, tmpdir, leftrev, rightrev, leftrev_args, rightrev_args, range_args)
 
     findings = []
 

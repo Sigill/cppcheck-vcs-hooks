@@ -4,36 +4,18 @@ Utilities to write VCS hooks for [cppcheck](http://cppcheck.net/).
 
 It started with the [mercurialhook](https://sourceforge.net/p/cppcheck/wiki/mercurialhook/), but quickly evolved to something new.
 
-## cppcheck-mercurial.sh
+Required python packages:
+
+- termcolor
+- editdistance
+
+## cppcheck-mercurial.py
 
 Script to run cppcheck on a Mercurial repository.
 
-## cppcheck-diff-findings
+## cppcheck-diff-findings.py
 
 The `cppcheck-diff-findings` scripts allow to perform fuzzy analysis between two sets of cppcheck findings in order to identify new findings.
-
-### Python version
-
-The Python version requires `editdistance` module:
-
-```
-pip install editdistance
-or
-yum install python-editdistance
-```
-
-The `Levenshtein` module can also be used instead (you'll have to modify the script for that).
-
-### Ruby version
-
-The Ruby version requires the `levenshtein-ffi` module:
-
-```
-gem install levenshtein-ffi
-```
-
-The `levenshtein` module can also be used instead (you'll have to modify the script for that).
-Be aware that it is quite slower.
 
 ## License
 
