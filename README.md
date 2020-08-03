@@ -2,16 +2,18 @@
 
 Utilities to write VCS hooks for [cppcheck](http://cppcheck.net/).
 
-It started with the [mercurialhook](https://sourceforge.net/p/cppcheck/wiki/mercurialhook/), but quickly evolved to something new.
+It started with [mercurialhook](https://sourceforge.net/p/cppcheck/wiki/mercurialhook/), but quickly evolved to something new.
 
-Required python packages:
+Required python packages (`pip install -r requirements.txt`):
 
 - termcolor
 - editdistance
 
+These scripts should work with most versions of Python (tested with 2.6, 2.7 and 3.x).
+
 ## cppcheck-mercurial.py
 
-Script to run cppcheck on a Mercurial repository.
+Script to run cppcheck on (commits of) a Mercurial repository.
 
 ## cppcheck-diff-findings.py
 

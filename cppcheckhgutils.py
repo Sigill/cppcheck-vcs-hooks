@@ -1,5 +1,5 @@
 from __future__ import print_function
-import os, sys, re, shlex, shutil
+import os, sys, re, shutil
 import subprocess
 from termcolor import colored
 import tempfile
@@ -7,6 +7,15 @@ import multiprocessing
 
 sys.path.append(os.path.abspath(os.path.dirname(os.path.realpath(__file__))))
 import cppcheckutils
+
+if (sys.version_info[0] == 3):
+  import shlex
+  def join_args(args):
+    return shlex.join(args)
+elif (sys.version_info[0] == 2):
+  import pipes
+  def join_args(args):
+    return " ".join(pipes.quote(a) for a in args)
 
 class Worker(object):
   def __init__(self, ctx, tmpdir, leftrev, rightrev, leftrev_args, rightrev_args, range_args):
@@ -34,7 +43,7 @@ class MercurialCPPCheckRunner(object):
 
   def __print_cmd(self, args):
     if self.verbose > 1:
-      MercurialCPPCheckRunner.eprint(colored(shlex.join(args), 'blue'))
+      MercurialCPPCheckRunner.eprint(colored(join_args(args), 'blue'))
 
   def __execute(self, args, stdout=None, stderr=None):
     self.__print_cmd(args)
@@ -123,7 +132,7 @@ class MercurialCPPCheckRunner(object):
   def analyse_file(self, i, f, s, tmpdir, leftrev, rightrev, leftrev_args, rightrev_args, range_args):
     src = os.path.join(self.hg_root, f)
     if rightrev is None and not os.path.exists(src):
-      eprint('%s does not exist, skipping' % src)
+      MercurialCPPCheckRunner.eprint('%s does not exist, skipping' % src)
       return []
 
     fwd = os.path.join(tmpdir, str(i))

@@ -49,8 +49,12 @@ if len(unknown) > 0:
 if args.ignore:
   runner.load_ignore_patterns(args.ignore)
 
-findings = runner.analyse(args.change, args.from_rev, args.to_rev, args.untracked, args.files, args.j, args.keep)
+try:
+  findings = runner.analyse(args.change, args.from_rev, args.to_rev, args.untracked, args.files, args.j, args.keep)
 
-for finding in findings:
-  print(finding)
+  for finding in findings:
+    print(finding)
+except ValueError as ex:
+  print(str(ex))
+
 

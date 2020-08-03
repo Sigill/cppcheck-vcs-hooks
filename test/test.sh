@@ -7,7 +7,7 @@ run() {
   local first=$1
   shift
   echo -e "${YELLOW}$first${RESET} $@"
-  $@
+  "$@"
 }
 
 PATH=$PWD:$PATH
@@ -28,8 +28,7 @@ std::string f(const std::string s) {
 }
 EOF
 
-declare -a BASECMD=(cppcheck-mercurial.sh -v)
-#declare -a BASECMD=(/opt/python3/bin/python3 ~/Apps/cppcheck-vcs-utils/cppcheck-mercurial.py)
+declare -a BASECMD=(/opt/python27/bin/python ~/Apps/cppcheck-vcs-utils/cppcheck-mercurial.py)
 
 run "Commit 0+ (pass by const ref)" "${BASECMD[@]}"
 run "Commit 0+ (skipped, no parent)" "${BASECMD[@]}" --from 'p1(tip) or 0' --to tip
