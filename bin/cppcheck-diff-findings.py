@@ -11,7 +11,7 @@ import sys, os
 import re
 
 sys.path.append(os.path.abspath(os.path.dirname(os.path.realpath(__file__))))
-import cppcheckutils
+import cppcheckvcsutils.cppcheckutils
 
 def read_findings(filename):
   with open(filename, 'r') as file:

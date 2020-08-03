@@ -7,7 +7,7 @@ from argparse import RawTextHelpFormatter
 import multiprocessing
 
 sys.path.append(os.path.abspath(os.path.dirname(os.path.realpath(__file__))))
-from cppcheckhgutils import MercurialCPPCheckRunner
+from cppcheckvcsutils.cppcheckhgutils import MercurialCPPCheckRunner
 
 parser = argparse.ArgumentParser(description='Run cppcheck on the files modified between two Mercurial revisions.', formatter_class=RawTextHelpFormatter)
 parser.add_argument('--from', dest='from_rev', metavar='REV',

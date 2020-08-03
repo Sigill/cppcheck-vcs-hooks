@@ -18,7 +18,7 @@ def get_findings(iter):
   return [ e.rstrip() for e in entries ]
 
 def is_new_finding(new_finding, known_findings):
-  closest_dst = 8 # Do not authorize more tha 8 editions.
+  closest_dst = 8 # Do not authorize more than 8 editions.
   closest = None
   for known_finding in known_findings:
     dst = editdist.distance(new_finding, known_finding)

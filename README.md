@@ -6,6 +6,7 @@ It started with [mercurialhook](https://sourceforge.net/p/cppcheck/wiki/mercuria
 
 Required python packages (`pip install -r requirements.txt`):
 
+- argparse
 - termcolor
 - editdistance
 
@@ -18,6 +19,20 @@ Script to run cppcheck on (commits of) a Mercurial repository.
 ## cppcheck-diff-findings.py
 
 The `cppcheck-diff-findings` scripts allow to perform fuzzy analysis between two sets of cppcheck findings in order to identify new findings.
+
+## Build & packaging
+
+```
+virtualenv venv
+source venv/bin/activate
+
+# Editable install, for development purpose
+pip install -e .
+
+# Standard install
+python setup.py bdist_wheel --universal # might require pip install wheel
+pip install dist/cppcheckvcsutils*.whl
+```
 
 ## License
 
