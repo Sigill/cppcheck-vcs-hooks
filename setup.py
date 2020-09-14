@@ -1,10 +1,10 @@
 import setuptools
 
 with open("README.md", "r") as fh:
-  long_description = fh.read()
+    long_description = fh.read()
 
 with open('requirements.txt') as f:
-  requirements = f.read().splitlines()
+    requirements = f.read().splitlines()
 
 setuptools.setup(
     name="cppcheckvcsutils",
@@ -17,14 +17,14 @@ setuptools.setup(
     url="https://github.com/Sigill/cppcheck-vcs-utils",
     packages=setuptools.find_packages(),
     classifiers=[
-      "Programming Language :: Python :: 2",
-      "Programming Language :: Python :: 3",
-      "Programming Language :: C++",
-      "License :: OSI Approved :: MIT License",
-      "Operating System :: OS Independent",
-      "Topic :: Software Development :: Version Control ",
-      ],
+        "Programming Language :: Python :: 2",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: C++",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Topic :: Software Development :: Version Control ",
+    ],
     python_requires='>=2.6',
     install_requires=requirements,
     scripts=['bin/cppcheck-diff-findings.py', 'bin/cppcheck-mercurial.py'],
-    )
+)

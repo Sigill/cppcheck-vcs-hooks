@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 YELLOW="\e[93m"
 RESET="\e[0m"
@@ -14,6 +14,7 @@ PATH=$PWD:$PATH
 HG_ROOT=$(mktemp -d)
 
 pushd "$HG_ROOT" > /dev/null
+export HGUSER="John <smith@example.com>"
 hg init
 
 touch f.cpp
@@ -28,18 +29,18 @@ std::string f(const std::string s) {
 }
 EOF
 
-declare -a BASECMD=(/opt/python27/bin/python ~/Apps/cppcheck-vcs-utils/cppcheck-mercurial.py)
+declare -a BASECMD=(cppcheck-mercurial.py)
 
 run "Commit 0+ (pass by const ref)" "${BASECMD[@]}"
-run "Commit 0+ (skipped, no parent)" "${BASECMD[@]}" --from 'p1(tip) or 0' --to tip
+run "Commit 0+ (skipped, no parent)" "${BASECMD[@]}" --from 'p1(tip)' --to tip
 run "Commit 0+ (pass by const ref)" "${BASECMD[@]}" --from 'p1(tip) or 0'
 
 hg commit -m "Commit 1"
 COMMIT=$(hg id -i)
 
 run "Commit 1 (empty)" "${BASECMD[@]}"
-run "Commit 1 (pass by const ref)" "${BASECMD[@]}" --from 'p1(tip) or 0' --to tip
-run "Commit 1 (pass by const ref)" "${BASECMD[@]}" --from 'p1(tip) or 0'
+run "Commit 1 (pass by const ref)" "${BASECMD[@]}" --from 'p1(tip)' --to tip
+run "Commit 1 (pass by const ref)" "${BASECMD[@]}" --from 'p1(tip)'
 run "Commit 1 (pass by const ref)" "${BASECMD[@]}" -c tip
 
 hg mv f.cpp g.cpp
@@ -56,13 +57,13 @@ std::string f(const std::string s) {
 EOF
 
 run "Commit 1+ (pass by const ref, catch by ref)" "${BASECMD[@]}"
-run "Commit 1+ (pass by const ref, catch by ref)" "${BASECMD[@]}" --from 'p1(tip) or 0'
+run "Commit 1+ (pass by const ref, catch by ref)" "${BASECMD[@]}" --from 'p1(tip)'
 
 hg commit -m "Commit 2"
 COMMIT=$(hg id -i)
 
 run "Commit 2 (empty)" "${BASECMD[@]}"
-run "Commit 2 (pass by const ref, catch by ref)" "${BASECMD[@]}" --from 'p1(tip) or 0' --to tip
+run "Commit 2 (pass by const ref, catch by ref)" "${BASECMD[@]}" --from 'p1(tip)' --to tip
 
 cat << EOF > g.cpp
 #include <string>
@@ -78,14 +79,14 @@ std::string f(const std::string s) {
 EOF
 
 run "Commit 2+ (pass by const ref)" "${BASECMD[@]}"
-run "Commit 2+ (skipped)" "${BASECMD[@]}" --from 'p1(tip) or 0' 
+run "Commit 2+ (skipped)" "${BASECMD[@]}" --from 'p1(tip)' 
 
 hg commit -m "Commit 3"
 COMMIT=$(hg id -i)
 
 run "Commit 3 (empty)" "${BASECMD[@]}"
-run "Commit 3 (pass by const ref)" "${BASECMD[@]}" --from 'p1(tip) or 0' --to tip
+run "Commit 3 (pass by const ref)" "${BASECMD[@]}" --from 'p1(tip)' --to tip
 
-popd "$HG_ROOT" > /dev/null
+popd > /dev/null
 
 rm -rf "$HG_ROOT"
