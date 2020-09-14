@@ -9,12 +9,12 @@ import tempfile
 from termcolor import colored
 import cppcheckvcsutils.cppcheckutils
 
-if sys.version_info[0] == 3:
+if sys.version_info >= (3, 8):
     import shlex
 
     def join_args(args):
         return shlex.join(args)
-elif sys.version_info[0] == 2:
+else:
     import pipes
 
     def join_args(args):

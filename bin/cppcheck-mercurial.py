@@ -29,8 +29,6 @@ parser.add_argument('--ignore', dest='ignore', metavar='FILE',
                          'In case of match, the finding is ignored.')
 parser.add_argument('--hg', dest='hg_root', metavar='DIR', default=os.getcwd(),
                     help='Location of the mercurial repository.')
-parser.add_argument('--exitcode', type=int, dest='exitcode', metavar='VALUE=0', default=0,
-                    help='Exit code if findings are found.')
 parser.add_argument('-k', '--keep', dest='keep', default=False, action='store_true',
                     help='Keep working directory')
 parser.add_argument('-j', dest='j', type=int, default=multiprocessing.cpu_count(),
