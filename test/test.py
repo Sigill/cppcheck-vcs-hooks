@@ -30,16 +30,18 @@ class HGCPPCheck(unittest.TestCase):
                 f.write("#include <string>\n"
                         "std::string f(const std::string s) {\n"
                         "  return s + s;\n"
-                        "}")
+                        "}\n")
 
             self.assertListEqual(runner.analyse(j=1),
                                  ["f.cpp:2:33: performance: Function parameter 's' should be passed by const reference. [passedByValue]\n"
                                   'std::string f(const std::string s) {\n'
                                   '                                ^'])
 
-            with self.assertRaises(ValueError):
-                # Skipped, no parent
+            with self.assertRaises(ValueError) as cm:
+                # Skipped, p1(tip) does not exists
                 runner.analyse(j=1, leftrev='p1(tip)', rightrev='tip')
+
+            self.assertEqual(str(cm.exception), "Revision tip has 0 parents, skipping")
 
             self.assertListEqual(runner.analyse(j=1, leftrev='p1(tip) or 0'),
                                  ["f.cpp:2:33: performance: Function parameter 's' should be passed by const reference. [passedByValue]\n"
@@ -76,7 +78,7 @@ class HGCPPCheck(unittest.TestCase):
                         "  } catch (const std::exception ex) {\n"
                         "    throw std::runtime_error(ex.what());\n"
                         "  }\n"
-                        "}")
+                        "}\n")
 
             self.assertEqual(runner.analyse(j=1),
                              ["g.cpp:6:5: style: Exception should be caught by reference. [catchExceptionByValue]\n"
@@ -116,7 +118,7 @@ class HGCPPCheck(unittest.TestCase):
                         "  } catch (const std::exception& ex) {\n"
                         "    throw std::runtime_error(ex.what());\n"
                         "  }\n"
-                        "}")
+                        "}\n")
 
             self.assertEqual(runner.analyse(j=1),
                              ["g.cpp:4:33: performance: Function parameter 's' should be passed by const reference. [passedByValue]\n"
@@ -133,6 +135,43 @@ class HGCPPCheck(unittest.TestCase):
             self.assertEqual(runner.analyse(j=1), [])
 
             self.assertEqual(runner.analyse(j=1, leftrev='p1(tip)', rightrev='tip'), [])
+
+            run('hg', 'update', '--rev', '2')
+            run('hg', 'branch', 'feature')
+
+            with open('g.cpp', 'w') as f:
+                f.write("#include <string>\n"
+                        "\n"
+                        "std::string f(const std::string s) {\n"
+                        "  try {\n"
+                        "    return s + s;\n"
+                        "  } catch (const std::exception& ex) {\n"
+                        "    throw std::runtime_error(ex.what());\n"
+                        "  }\n"
+                        "}\n"
+                        "\n"
+                        "std::vector<int> h(const std::vector<int> v) {\n"
+                        "  return v;\n"
+                        "}\n")
+
+            run('hg', 'commit', '-m', 'Commit 2-2')
+
+            run('hg', 'update', 'default')
+            run('hg', 'merge', 'feature')
+            run('hg', 'commit', '-m', 'Merge branch feature')
+
+            self.assertEqual(runner.analyse(j=1), [])
+
+            with self.assertRaises(ValueError) as cm:
+                # Skipped, tip has more than 1 parent
+                runner.analyse(j=1, leftrev='p1(tip)', rightrev='tip')
+
+            self.assertEqual(str(cm.exception), "Revision tip has 2 parents, skipping")
+
+            # self.assertEqual(runner.analyse(j=1, leftrev='p1(tip)', rightrev='tip'),
+            #                  ["g.cpp:12:43: performance: Function parameter 'v' should be passed by const reference. [passedByValue]\n"
+            #                   'std::vector<int> h(const std::vector<int> v) {\n'
+            #                   '                                          ^'])
 
         finally:
             try:
