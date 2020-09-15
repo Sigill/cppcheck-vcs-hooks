@@ -1,11 +1,16 @@
 #!/usr/bin/env python
-import unittest
 import os
+import sys
 import tempfile
 import shutil
 import errno
 import subprocess
 from cppcheckvcsutils.cppcheckhgutils import MercurialCPPCheckRunner
+
+if sys.version_info >= (2, 7):
+    import unittest
+else:
+    import unittest2 as unittest
 
 
 def run(*args):
