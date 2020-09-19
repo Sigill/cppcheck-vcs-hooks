@@ -26,5 +26,5 @@ setuptools.setup(
     ],
     python_requires='>=2.6',
     install_requires=requirements,
-    scripts=['bin/cppcheck-diff-findings.py', 'bin/cppcheck-mercurial.py'],
+    scripts=['bin/cppcheck-mercurial.py'],
 )

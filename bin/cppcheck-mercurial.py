@@ -19,7 +19,7 @@ parser.add_argument('--to', dest='to_rev', metavar='REV',
 parser.add_argument('-c', '--change', dest='change', metavar='REV',
                     help='Consider changes introduced by this revision.\n'
                          'Equivalent to --from \'p1(REV)\' --to REV.')
-parser.add_argument('-f', '--file', dest='files', metavar='FILE', action='append', default=[],
+parser.add_argument('-f', '--file', dest='files', metavar='FILE', nargs='+', default=[],
                     help='File to analyse.\n'
                          'If not specified, the list of files is automatically obtained using hg status.')
 parser.add_argument('-u', '--untracked', dest='untracked', action='store_true',

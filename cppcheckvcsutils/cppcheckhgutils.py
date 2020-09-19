@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 from termcolor import colored
-import cppcheckvcsutils.cppcheckutils
+from gccwarnings.utils import parse_warnings, filter_warnings, fuzzy_find
 
 if sys.version_info >= (3, 8):
     import shlex
@@ -69,7 +69,7 @@ class MercurialCPPCheckRunner(object):
         else:
             raise ValueError('No mercurial repository found at %s' % hg_root)
 
-        self.cppcheckoptions = ["--enable=warning,style,performance,portability", "--language=c++", "--inconclusive"]
+        self.cppcheck_options = ["--enable=warning,style,performance,portability", "--language=c++", "--inconclusive"]
         self.ignore_patterns = []
 
     def set_ignore_patterns(self, *patterns):
@@ -80,7 +80,7 @@ class MercurialCPPCheckRunner(object):
             self.ignore_patterns = [re.compile(line.rstrip('\n')) for line in f]
 
     def set_cppcheck_options(self, *args):
-        self.cppcheckoptions = args
+        self.cppcheck_options = args
 
     def is_relevant(self, finding):
         return not any(p.search(finding) for p in self.ignore_patterns)
@@ -121,7 +121,7 @@ class MercurialCPPCheckRunner(object):
 
     def run_cppcheck(self, d, f):
         cmd = ['cppcheck', '-q', '--relative-paths=%s' % d]
-        cmd.extend(self.cppcheckoptions)
+        cmd.extend(self.cppcheck_options)
         cmd.append(os.path.join(d, f))
 
         result = self.__capture(cmd)
@@ -129,12 +129,12 @@ class MercurialCPPCheckRunner(object):
         if len(result[2]) == 0:
             return []
 
-        findings = cppcheckvcsutils.cppcheckutils.get_findings(result[2].decode('utf-8').split('\n'))
+        findings = parse_warnings(result[2].decode('utf-8').splitlines())
 
-        if len(self.ignore_patterns) == 0:
-            return findings
+        if len(self.ignore_patterns) > 0:
+            findings = filter_warnings(findings, exclude=self.ignore_patterns)
 
-        return [finding for finding in findings if self.is_relevant(finding)]
+        return ["\n".join(finding) for finding in findings]
 
     def analyse_file(self, i, f, s, tmpdir, leftrev, rightrev, leftrev_args, rightrev_args, range_args):
         src = os.path.join(self.hg_root, f)
@@ -192,7 +192,7 @@ class MercurialCPPCheckRunner(object):
             MercurialCPPCheckRunner.eprint(colored('\n'.join(rightfindings), 'green', attrs=['concealed']))
 
         if len(leftfindings) > 0 and len(rightfindings) > 0:
-            return cppcheckvcsutils.cppcheckutils.filter_new_findings(leftfindings, rightfindings)
+            return [finding for finding in rightfindings if not fuzzy_find(finding, leftfindings, 8)]
         else:
             return rightfindings
 
