@@ -27,6 +27,21 @@ class HGCPPCheck(unittest.TestCase):
 
             runner = MercurialCPPCheckRunner(tmp_dir, verbose=0)
 
+            with open('f.cpp', 'w') as f:
+                f.write("#include <string>\n"
+                        "std::string f(const std::string s) {\n"
+                        "  return s + s;\n"
+                        "}\n")
+
+            self.assertEqual(runner.analyse(j=1), [])
+
+            self.assertListEqual(runner.analyse(j=1, untracked=True),
+                                 ["f.cpp:2:33: performance: Function parameter 's' should be passed by const reference. [passedByValue]\n"
+                                  'std::string f(const std::string s) {\n'
+                                  '                                ^'])
+
+            os.remove('f.cpp')
+
             run('touch', 'f.cpp')
             run('hg', 'add', 'f.cpp')
             run('hg', 'commit', '-m', 'Commit 0')
