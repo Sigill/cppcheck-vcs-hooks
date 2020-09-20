@@ -1,5 +1,7 @@
 import setuptools
 
+from cppcheckvcsutils import VERSION
+
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
@@ -8,7 +10,7 @@ with open('requirements.txt') as f:
 
 setuptools.setup(
     name="cppcheckvcsutils",
-    version="0.0.1",
+    version='.'.join(str(v) for v in VERSION),
     author="Cyrille Faucheux",
     author_email="cyrille.faucheux@gmail.com",
     description="Utilities to write VCS hooks for cppcheck",
@@ -26,5 +28,5 @@ setuptools.setup(
     ],
     python_requires='>=2.6',
     install_requires=requirements,
-    scripts=['bin/cppcheck-mercurial.py'],
+    scripts=['bin/cppcheck-mercurial'],
 )

@@ -4,6 +4,9 @@ dependencies:
 dependencies-all: dependencies
 	pip install flake8
 
+test:
+	./test/test.py
+
 package:
 	python setup.py bdist_wheel --universal
 
