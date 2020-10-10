@@ -8,7 +8,7 @@ Required python packages (`pip install -r requirements.txt`):
 
 - argparse
 - termcolor
-- [gcc-warnings](https://github.com/Sigill/gcc-warnings)
+- [ccwarnings](https://github.com/Sigill/ccwarnings)
 
 These scripts should work with most versions of Python (tested with 2.6, 2.7 and 3.x).
 

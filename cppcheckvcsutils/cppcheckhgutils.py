@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 from termcolor import colored
-from gccwarnings.utils import parse_warnings, filter_warnings, fuzzy_find
+from ccwarnings.utils import parse_warnings, filter_warnings, fuzzy_find
 
 if sys.version_info >= (3, 8):
     import shlex
