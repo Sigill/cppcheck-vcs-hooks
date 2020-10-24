@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 from termcolor import colored
-from ccwarnings.utils import parse_warnings, filter_warnings, fuzzy_find
+from ccwarnings.utils import parse_cppcheck_warnings, filter_warnings, fuzzy_find
 
 if sys.version_info >= (3, 8):
     import shlex
@@ -129,7 +129,7 @@ class MercurialCPPCheckRunner(object):
         if len(result[2]) == 0:
             return []
 
-        findings = parse_warnings(result[2].decode('utf-8').splitlines())
+        findings = parse_cppcheck_warnings(result[2].decode('utf-8').splitlines())
 
         if len(self.ignore_patterns) > 0:
             findings = filter_warnings(findings, exclude=self.ignore_patterns)
